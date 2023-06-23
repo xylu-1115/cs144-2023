@@ -1,4 +1,15 @@
-[toc]
+- [Lab 0: networking warmup](#lab-0-networking-warmup)
+  - [3 Writing a network program using an OS stream socket](#3-writing-a-network-program-using-an-os-stream-socket)
+    - [3.1 Get started](#31-get-started)
+    - [3.2 Modern C++: mostly safe but still fast and low-level](#32-modern-c-mostly-safe-but-still-fast-and-low-level)
+    - [3.3 Reading the Minnow support code](#33-reading-the-minnow-support-code)
+    - [3.4 Writing webget](#34-writing-webget)
+  - [4 An in-memory reliable byte stream](#4-an-in-memory-reliable-byte-stream)
+- [Lab 1: stitching substrings into a byte stream](#lab-1-stitching-substrings-into-a-byte-stream)
+  - [1 Getting started](#1-getting-started)
+  - [2 Putting substrings in sequence](#2-putting-substrings-in-sequence)
+    - [2.1 What should the Reassembler store internally?](#21-what-should-the-reassembler-store-internally)
+    - [2.2 FAQs](#22-faqs)
 
 # Lab 0: networking warmup
 ## 3 Writing a network program using an OS stream socket
