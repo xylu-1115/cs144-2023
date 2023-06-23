@@ -13,6 +13,10 @@ class Reassembler
   uint64_t pend_size { 0 };
   std::map<uint64_t, std::string> mp {};
 
+  void preprocess( uint64_t& first_index, std::string& data, Writer& output );
+  void adjust( std::map<uint64_t, std::string>::iterator p );
+  void push( Writer& output );
+
 public:
   /*
    * Insert a new substring to be reassembled into a ByteStream.
