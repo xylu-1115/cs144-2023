@@ -4,11 +4,11 @@
 
 #include <limits>
 #include <map>
+#include <optional>
 #include <string>
 
 class Reassembler
 {
-  uint64_t tot_size { 0 };
   bool set_last { false };
   uint64_t pend_size { 0 };
   std::map<uint64_t, std::string> mp {};

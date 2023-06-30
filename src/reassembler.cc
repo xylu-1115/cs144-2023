@@ -1,6 +1,7 @@
 #include "reassembler.hh"
 
-void Reassembler::preprocess( uint64_t& first_index, std::string& data, Writer& output ) {
+void Reassembler::preprocess( uint64_t& first_index, std::string& data, Writer& output )
+{
   const uint64_t max_size = output.bytes_pushed() + output.available_capacity();
   const uint64_t min_size = output.bytes_pushed();
 
@@ -17,7 +18,8 @@ void Reassembler::preprocess( uint64_t& first_index, std::string& data, Writer& 
   }
 }
 
-void Reassembler::adjust( std::map<uint64_t, std::string>::iterator p ) {
+void Reassembler::adjust( std::map<uint64_t, std::string>::iterator p )
+{
   auto p2 = p++;
   while ( p != mp.end() ) {
     const int64_t t = p2->first + p2->second.size() - p->first;
@@ -40,11 +42,10 @@ void Reassembler::insert( uint64_t first_index, std::string data, bool is_last_s
   // if (data.empty()) return;
 
   if ( is_last_substring ) {
-    tot_size = std::max(tot_size, first_index + data.size());
     set_last = true;
   }
 
-  preprocess(first_index, data, output);
+  preprocess( first_index, data, output );
 
   auto p1 = mp.lower_bound( first_index );
 
@@ -72,14 +73,15 @@ void Reassembler::insert( uint64_t first_index, std::string data, bool is_last_s
     }
   }
 
-  push(output);
+  push( output );
 
-  if ( output.bytes_pushed() == tot_size && set_last ) {
+  if ( set_last && mp.empty() ) {
     output.close();
   }
 }
 
-void Reassembler::push( Writer& output ) {
+void Reassembler::push( Writer& output )
+{
   uint64_t nxt_idx = output.bytes_pushed();
   uint64_t nnxt_idx = 0;
   while ( mp.contains( nxt_idx ) ) {
