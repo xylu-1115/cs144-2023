@@ -15,15 +15,6 @@
   - [2 Implementing the TCP receiver](#2-implementing-the-tcp-receiver)
     - [2.1 receive()](#21-receive)
 
-<style>
-  .center {
-  width: auto;
-  display: table;
-  margin-left: auto;
-  margin-right: auto;
-}
-</style>
-
 # Lab 0: networking warmup
 ## 3 Writing a network program using an OS stream socket
 ### 3.1 Get started
@@ -139,28 +130,21 @@ These sequence numbers (**seqnos**) are transmitted in the header of each TCP se
 
 To make these distinctions concrete, consider the byte stream containing just the three-letter string *'cat'*. If the SYN happened to have seqno $2^{32}-2$, then the seqnos, absolute seqnos, and stream indices of each byte are:
 
-<div class="center">
-
 | element           | *SYN*      | c          | a | t | *FIN* |
 |------------------:|:----------:|:----------:|:-:|:-:|:-----:|
 | **seqno**         | $2^{32}-2$ | $2^{32}-1$ | 0 | 1 |  2    |
 | **absolute seqno**| 0          | 1          | 2 | 3 |  4    |
 | **stream index**  |            | 0          | 1 | 2 |       |
 
-</div>
 
 The figure shows the three different types of indexing involved in TCP:
 
-<div class="center">
-
 Sequence Numbers | Absolute Sequence Numbers | Stream Indices
-----------|----------|----------
+----------|----------|:----------
 Start at the ISN | Start at 0 | Start at 0
 Include SYN/FIN | Include SYN/FIN | Omit SYN/FIN
 32 bits, wrapping | 64 bits, non-wrapping | 64 bits, non-wrapping
  "seqno" | "absolute seqno" | "stream index"
-
-</div>
 
 Converting between absolute sequence numbers and stream indices is easy enough -- just add or subtract one. Unfortunately, converting between sequence numbers and absolute sequence numbers is a bit harder, and confusing the two can produce tricky bugs. To prevent these bugs systematically, we'll represent sequence numbers with a custom type: *Wrap32*, and write the conversions between it and absolute sequence numbers (represented with *uint64_t*). *Wrap32* is an example of a *wrapper type*: a type that contains an inner type (in this case *uint32_t*) but provides a different set of functions/operators.
 
