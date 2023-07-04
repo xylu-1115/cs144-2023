@@ -14,6 +14,10 @@
   - [1 Translating between 64-bit indexes and 32-bit seqnos](#1-translating-between-64-bit-indexes-and-32-bit-seqnos)
   - [2 Implementing the TCP receiver](#2-implementing-the-tcp-receiver)
     - [2.1 receive()](#21-receive)
+- [Lab 3: the TCP sender](#lab-3-the-tcp-sender)
+  - [1 How does the TCPSender know if a segment was lost?](#1-how-does-the-tcpsender-know-if-a-segment-was-lost)
+  - [2 Implementing the TCP sender](#2-implementing-the-tcp-sender)
+  - [3 FAQs and special cases](#3-faqs-and-special-cases)
 
 # Lab 0: networking warmup
 ## 3 Writing a network program using an OS stream socket
@@ -248,3 +252,213 @@ The same message could also carry data or have the FIN flag set.)
 that means that the last byte of the payload is the last byte of the entire stream.
 Remember that the Reassembler expects stream indexes starting at zero; you will have
 to unwrap the seqnos to produce these.
+
+# Lab 3: the TCP sender
+TCP is a protocol that reliably conveys a pair of flow-controlled byte streams (one in each
+direction) over unreliable datagrams. Two party participate in the TCP connection, and
+each party is a peer of the other. Each peer acts as both "sender" (of its own outgoing
+byte-stream) and "receiver" (of an incoming byte-stream) at the same time.
+
+
+This week, you'll implement the "sender" part of TCP, responsible for reading from a
+ByteStream (created and written to by some sender-side application), and turning the stream
+into a sequence of outgoing TCP segments. On the remote side, a TCP receiver
+transforms
+those segments (those that arrive -- they might not all make it) back into the original byte
+stream, and sends acknowledgments and window advertisements back to the sender.
+
+It will be your TCPSender's responsibility to:
+ - Keep track of the receiver's window (receiving incoming TCPReceiverMessages with
+their **ackno**s and **window size**s)
+ - Fill the window when possible, by reading from the ByteStream, creating new TCP
+segments (including SYN and FIN flags if needed), and sending them. The sender should
+keep sending segments until either the window is full or the outbound ByteStream has
+nothing more to send.
+ - Keep track of which segments have been sent but not yet acknowledged by the receiver -- 
+we call these "outstanding" segments
+ - Re-send outstanding segments if enough time passes since they were sent, and they
+haven't been acknowledged yet
+
+⋆ *Why am I doing this?* The basic principle is to send whatever the receiver will allow
+us to send (filling the window), and keep retransmitting until the receiver acknowledges
+each segment. This is called "automatic repeat request" (ARQ). The sender divides the
+byte stream up into segments and sends them, as much as the receiver's window allows.
+Thanks to your work last week, we know that the remote TCP receiver can reconstruct
+the byte stream as long as it receives each index-tagged byte at least once -- no matter
+the order. The sender's job is to make sure the receiver gets each byte at least once.
+
+## 1 How does the TCPSender know if a segment was lost?
+
+Your TCPSender will be sending a bunch of TCPSenderMessages. Each will contain a (possibly-empty) substring from the outgoing ByteStream, indexed with a sequence number to indicate
+its position in the stream, and marked with the SYN flag at the beginning of the stream, and
+FIN flag at the end.
+
+In addition to sending those segments, the TCPSender also has to keep track of its outstanding
+segments until the sequence numbers they occupy have been fully acknowledged. Periodically,
+the owner of the TCPSender will call the TCPSender's tick method, indicating the passage
+of time. The TCPSender is responsible for looking through its collection of outstanding
+TCPSenderMessages and deciding if the oldest-sent segment has been outstanding for too long
+without acknowledgment (that is, without all of its sequence numbers being acknowledged).
+
+If so, it needs to be retransmitted (sent again).
+Here are the rules for what "outstanding for too long" means.2 You're going to be implementing this logic, and it's a little detailed, but we don't want you to be worrying about hidden
+test cases trying to trip you up or treating this like a word problem on the SAT. We'll give
+you some reasonable unit tests this week, and fuller integration tests in Lab 4 once you've
+finished the whole TCP implementation. As long as you pass those tests 100% and your
+implementation is reasonable, you'll be fine.
+
+⋆ *Why am I doing this?* The overall goal is to let the sender detect when segments
+go missing and need to be resent, in a timely manner. The amount of time to wait
+before resending is important: you don't want the sender to wait too long to resend a
+segment (because that delays the bytes flowing to the receiving application), but you
+also don't want it to resend a segment that was going to be acknowledged if the sender
+had just waited a little longer -- that wastes the Internet's precious capacity.
+
+1. Every few milliseconds, your TCPSender's tick method will be called with an argument
+that tells it how many milliseconds have elapsed since the last time the method was
+called. Use this to maintain a notion of the total number of milliseconds the TCPSender
+has been alive. **Please don't try to call any "time" or "clock" functions** from
+the operating system or CPU -- the tick method is your only access to the passage of
+time. That keeps things deterministic and testable.
+
+2. When the TCPSender is constructed, it's given an argument that tells it the "initial value"
+of the **retransmission timeout** (RTO). The RTO is the number of milliseconds to
+wait before resending an outstanding TCP segment. The value of the RTO will change
+over time, but the "initial value" stays the same. The starter code saves the "initial
+value" of the RTO in a member variable called _initial_retransmission_timeout.
+
+3. You'll implement the retransmission **timer**: an alarm that can be started at a certain
+time, and the alarm goes off (or "expires") once the RTO has elapsed. We emphasize
+that this notion of time passing comes from the tick method being called -- not by
+getting the actual time of day.
+4. Every time a segment containing data (nonzero length in sequence space) is sent
+(whether it's the first time or a retransmission), if the timer is not running, **start it running** so that it will expire after RTO milliseconds (for the current value of RTO).
+By "expire," we mean that the time will run out a certain number of milliseconds in
+the future.
+5. When all outstanding data has been acknowledged, **stop** the retransmission timer.
+6. If tick is called and the retransmission timer has expired:
+     1. Retransmit the earliest (lowest sequence number) segment that hasn't been fully
+acknowledged by the TCP receiver. You'll need to be storing the outstanding
+segments in some internal data structure that makes it possible to do this.
+     2. **If the window size is nonzero:**
+         1. Keep track of the number of consecutive retransmissions, and increment it
+because you just retransmitted something. Your TCPConnection will use this
+information to decide if the connection is hopeless (too many consecutive
+retransmissions in a row) and needs to be aborted.
+        2.  Double the value of RTO. This is called "exponential backoff" -- it slows down
+retransmissions on lousy networks to avoid further gumming up the works.
+    3. Reset the retransmission timer and start it such that it expires after RTO milliseconds (taking into account that you may have just doubled the value of RTO!).
+7. When the receiver gives the sender an ackno that acknowledges the successful receipt
+of new data (the ackno reflects an absolute sequence number bigger than any previous
+ackno):
+    1. Set the RTO back to its "initial value."
+    2. If the sender has any outstanding data, restart the retransmission timer so that it
+will expire after RTO milliseconds (for the current value of RTO).
+    3. Reset the count of "consecutive retransmissions" back to zero.
+
+You might choose to implement the functionality of the retransmission timer in a separate
+class, but it's up to you. If you do, please add it to the existing files (tcp_sender.hh and
+tcp_sender.cc).
+
+## 2 Implementing the TCP sender
+Okay! We’ve discussed the basic idea of what the TCP sender does (given an outgoing
+ByteStream, split it up into segments, send them to the receiver, and if they don’t get
+acknowledged soon enough, keep resending them). And we’ve discussed when to conclude
+that an outstanding segment was lost and needs to be resend.
+
+Now it’s time for the concrete interface that your TCPSender will provide. There are five
+important events that it needs to handle:
+
+1. `void push( Reader& outbound_stream );`
+   
+   The TCPSender is asked to *fill* the window from the outbound byte stream: it reads
+from the stream and generates as many TCPSenderMessages as possible, *as long as
+there are new bytes to be read and space available in the window*.
+
+    You’ll want to make sure that every TCPSenderMessage you send fits fully inside the
+receiver’s window. Make each individual message as big as possible, but no bigger than
+the value given by `TCPConfig::MAX_PAYLOAD_SIZE` (1452 bytes).
+
+    You can use the `TCPSenderMessage::sequence_length()` method to count the total
+number of sequence numbers occupied by a segment. Remember that the SYN and
+FIN flags also occupy a sequence number each, which means that *they occupy space in
+the window.*
+
+    ⋆ *What should I do if the window size is zero?* If the receiver has announced
+a window size of zero, the push method should pretend like the window size is
+**one**. The sender might end up sending a single byte that gets rejected (and not
+acknowledged) by the receiver, but this can also provoke the receiver into sending
+a new acknowledgment segment where it reveals that more space has opened up
+in its window. Without this, the sender would never learn that it was allowed to
+start sending again.
+
+    This is the **only** special case behavior your implementation should have for the
+case of a zero-size window. The TCPSender shouldn’t actually remember a
+false window size of 1. The special case is only within the push method. Also,
+N.B. that even if the window size is one, the window might still be **full**.
+2. `std::optional<TCPSenderMessage> maybe_send();`
+    
+    This is the TCPSender’s opportunity to actually send a TCPSenderMessage if it wants
+to.
+3. `void receive( const TCPReceiverMessage& msg );`
+    
+    A message is received from the receiver, conveying the new left (= ackno) and right (=
+ackno + window size) edges of the window. The TCPSender should look through its
+collection of outstanding segments and remove any that have now been fully acknowledged (the ackno is greater than all of the sequence numbers in the segment).
+
+4. `void tick( const size_t ms_ since_last_tick ):`
+    
+    Time has passed — a certain number of milliseconds since the last time this method
+was called. The sender may need to retransmit an outstanding segment.
+5. `void send_empty_message():` 
+    
+    The TCPSender should generate and send a zero-length
+message with the sequence number set correctly. This is useful if the peer wants to
+send a TCPReceiverMessage (e.g. because it needs to acknowledge something from the
+peer’s sender) and needs to generate a TCPSenderMessage to go with it.
+    
+    Note: a segment like this one, which occupies no sequence numbers, doesn’t need to be
+kept track of as “outstanding” and won’t ever be retransmitted.
+
+To complete Checkpoint 3, please review the full interface in src/tcp sender.hh implement
+the complete TCPSender public interface in the tcp sender.hh and tcp sender.cc files. We
+expect you’ll want to add private methods and member variables, and possibly a helper class.
+
+## 3 FAQs and special cases
+ - *How do I “send” a message?*
+  
+    Return it when maybe send() is called.
+ - *Wait, how do I both “send” a segment and also keep track of that same segment as
+being outstanding, so I know what to retransmit later? Don’t I have to make a copy of
+each segment then? Is that wasteful?*
+    
+    When you send a segment that contains data, you’ll probably want to keep a copy of it
+internally in a data structure that lets you keep track of outstanding segments for possible
+retransmission. This turns out not to be very wasteful because the TCPSenderMessage’s
+payload is stored as a reference-counted read-only string (a Buffer object). So don’t
+worry about it -- it’s not actually copying the payload data.
+ - *What should my TCPSender assume as the receiver’s window size before the receive
+method informs it otherwise?*
+    
+    One.
+ - *What do I do if an acknowledgment only partially acknowledges some outstanding
+segment? Should I try to clip off the bytes that got acknowledged?*
+    
+    A TCP sender could do this, but for purposes of this class, there’s no need to get fancy.
+Treat each segment as fully outstanding until it’s been fully acknowledged—all of the
+sequence numbers it occupies are less than the ackno.
+ - *If I send three individual segments containing “a,” “b,” and “c,” and they never get
+acknowledged, can I later retransmit them in one big segment that contains “abc”? Or
+do I have to retransmit each segment individually?*
+    
+    Again: a TCP sender could do this, but for purposes of this class, no need to get fancy.
+Just keep track of each outstanding segment individually, and when the retransmission
+timer expires, send the earliest outstanding segment again.
+ - *Should I store empty segments in my “outstanding” data structure and retransmit them
+when necessary?*
+    
+    No -- the only segments that should be tracked as outstanding, and possibly retransmitted, are those that convey some data—i.e. that consume some length in sequence space.
+A segment that occupies no sequence numbers (no payload, SYN, or FIN) doesn’t need
+to be remembered or retransmitted.
+ - Where can I read if there are more FAQs after this PDF comes out?
+Please check the website (https://cs144.github.io/lab faq.html) and Ed regularly.
