@@ -1,27 +1,31 @@
 - [Lab 0: networking warmup](#lab-0-networking-warmup)
-  - [3 Writing a network program using an OS stream socket](#3-writing-a-network-program-using-an-os-stream-socket)
-    - [3.1 Get started](#31-get-started)
-    - [3.2 Modern C++: mostly safe but still fast and low-level](#32-modern-c-mostly-safe-but-still-fast-and-low-level)
-    - [3.3 Reading the Minnow support code](#33-reading-the-minnow-support-code)
-    - [3.4 Writing webget](#34-writing-webget)
-  - [4 An in-memory reliable byte stream](#4-an-in-memory-reliable-byte-stream)
+  - [Writing a network program using an OS stream socket](#writing-a-network-program-using-an-os-stream-socket)
+    - [Get started](#get-started)
+    - [Modern C++: mostly safe but still fast and low-level](#modern-c-mostly-safe-but-still-fast-and-low-level)
+    - [Reading the Minnow support code](#reading-the-minnow-support-code)
+    - [Writing webget](#writing-webget)
+  - [An in-memory reliable byte stream](#an-in-memory-reliable-byte-stream)
 - [Lab 1: stitching substrings into a byte stream](#lab-1-stitching-substrings-into-a-byte-stream)
-  - [1 Getting started](#1-getting-started)
-  - [2 Putting substrings in sequence](#2-putting-substrings-in-sequence)
-    - [2.1 What should the Reassembler store internally?](#21-what-should-the-reassembler-store-internally)
-    - [2.2 FAQs](#22-faqs)
+  - [Getting started](#getting-started)
+  - [Putting substrings in sequence](#putting-substrings-in-sequence)
+    - [What should the Reassembler store internally?](#what-should-the-reassembler-store-internally)
+    - [FAQs](#faqs)
 - [Lab 2: the TCP receiver](#lab-2-the-tcp-receiver)
-  - [1 Translating between 64-bit indexes and 32-bit seqnos](#1-translating-between-64-bit-indexes-and-32-bit-seqnos)
-  - [2 Implementing the TCP receiver](#2-implementing-the-tcp-receiver)
-    - [2.1 receive()](#21-receive)
+  - [Translating between 64-bit indexes and 32-bit seqnos](#translating-between-64-bit-indexes-and-32-bit-seqnos)
+  - [Implementing the TCP receiver](#implementing-the-tcp-receiver)
+    - [receive()](#receive)
 - [Lab 3: the TCP sender](#lab-3-the-tcp-sender)
-  - [1 How does the TCPSender know if a segment was lost?](#1-how-does-the-tcpsender-know-if-a-segment-was-lost)
-  - [2 Implementing the TCP sender](#2-implementing-the-tcp-sender)
-  - [3 FAQs and special cases](#3-faqs-and-special-cases)
+  - [How does the TCPSender know if a segment was lost?](#how-does-the-tcpsender-know-if-a-segment-was-lost)
+  - [Implementing the TCP sender](#implementing-the-tcp-sender)
+  - [FAQs and special cases](#faqs-and-special-cases)
+- [Lab 4: down the stack (the network interface)](#lab-4-down-the-stack-the-network-interface)
+  - [Overview](#overview)
+  - [The Address Resolution Protocol](#the-address-resolution-protocol)
+  - [Q \& A](#q--a)
 
 # Lab 0: networking warmup
-## 3 Writing a network program using an OS stream socket
-### 3.1 Get started
+## Writing a network program using an OS stream socket
+### Get started
 Fetch the source code: `git clone https://github.com/cs144/minnow ` 
 
 Enter the Lab 0 directory: `cd minnow`
@@ -29,7 +33,7 @@ Enter the Lab 0 directory: `cd minnow`
 Create a directory to compile the lab software: `cmake -S . -B build`
 
 Compile the source code: `cmake --build build`
-### 3.2 Modern C++: mostly safe but still fast and low-level
+### Modern C++: mostly safe but still fast and low-level
 C++ standard:
 1. Use the language documentation at https://en.cppreference.com as a resource. (We'd recommend you avoid cplusplus.com which is more likely to be out-of-date.)
 2. Never use `malloc()` or `free()`.
@@ -44,10 +48,10 @@ C++ standard:
 11. Avoid global variables, and give every variable the smallest scope possible.
 12. Before handing in an assignment, run `cmake --build build --target tidy` for suggestions on how to improve the code related to C++ programming practices, and `cmake --build build --target format` to format the code consistently
 
-### 3.3 Reading the Minnow support code
+### Reading the Minnow support code
 Interface: [socket.hh](./minnow/util/socket.hh) and [file_descriptor.hh](./minnow/util/file_descriptor.hh)
 
-### 3.4 Writing webget
+### Writing webget
 To implement: [webget.cc](./minnow/apps/webget.cc), a program to fetch Web pages over the Internet using the operating system's TCP support and stream-socket abstraction. Use the [TCPSocket](./minnow/util/socket.hh) and [Address](./minnow/util/address.hh) classes.
 
 Hints:
@@ -57,7 +61,7 @@ Hints:
 
 Test: `cmake --build build --target check webget`
 
-## 4 An in-memory reliable byte stream
+## An in-memory reliable byte stream
 To implement: [stream.hh](./minnow/src/byte_stream.hh) and [stream.cc](./minnow/src/byte_stream.cc)
 Methods to implement:
 1. `vector<char>`: time exceeds
@@ -75,21 +79,21 @@ Notice:
 - `c_str()` has the same lifetime as the `string` object.
 
 # Lab 1: stitching substrings into a byte stream
-## 1 Getting started
+## Getting started
 1. Make sure you have committed all your solutions to Checkpoint 0. Please don't modify any files outside of the *src* directory, or *webget.cc*. You may have trouble merging the Checkpoint 1 starter code otherwise.
 2. While inside the repository for the lab assignments, run git fetch to retrieve the most recent version of the lab assignments.
 3. Download the starter code for Checkpoint 1 by running `git merge origin/check1-startercode`.
 4. Make sure your build system is properly set up: `cmake -S . -B build`
 5. Compile the source code: `cmake --build build`
 
-## 2 Putting substrings in sequence
+## Putting substrings in sequence
 The TCP sender is dividing its byte stream up into short segments (substrings no more than about 1,460 bytes apiece) so that they each fit inside a datagram. But the network might reorder these datagrams, or drop them, or deliver them more than once. The receiver must reassemble the segments into the contiguous stream of bytes that they started out as.
 
 In this lab you'll write the data structure that will be responsible for this reassembly: *a Reassembler*. It will receive substrings, consisting of a string of bytes, and the index of the first byte of that string within the larger stream. **Each byte of the stream** has its own unique index, starting from zero and counting upwards.
 
 The full (public) interface of the reassembler is described by the *Reassembler* class in the [reassembler.hh](./minnow/src/reassembler.hh) header. Your task is to implement this class. You may add any private members and member functions you desire to the *Reassembler* class, but you cannot change its public interface.
 
-### 2.1 What should the Reassembler store internally?
+### What should the Reassembler store internally?
 1. Bytes that are the **next bytes** in the stream. The Reassembler should push these to the Writer as soon as they are known.
 2. Bytes that fit within the stream's available capacity but can't yet be written, because earlier bytes remain unknown. These should be stored internally in the Reassembler.
 3. Bytes that lie beyond the stream's available capacity. These should be discarded. The Reassembler's will not store any bytes that can't be pushed to the ByteStream either immediately, or as soon as earlier bytes become known.
@@ -100,7 +104,7 @@ The goal of this behavior is to **limit the amount of memory** used by the Reass
 
 ![Alt text](images/check1.png)
 
-### 2.2 FAQs
+### FAQs
 - *What is the index of the first byte in the whole stream?*
 Zero.
 - *How efficient should my implementation be?*
@@ -123,7 +127,7 @@ TCP is a protocol that reliably conveys a pair of flow-controlled byte streams (
 
 This week, you'll implement the "receiver" part of TCP, responsible for receiving messages from the sender, reassembling the byte stream (including its ending, when that occurs), and determining that messages that should be sent back to the sender for acknowledgment and flow control.
 
-## 1 Translating between 64-bit indexes and 32-bit seqnos
+## Translating between 64-bit indexes and 32-bit seqnos
 As a warmup, we'll need to implement TCP's way of representing indexes. Last week you created a *Reassembler* that reassembles substrings where each individual byte has a 64-bit **stream index**, with the first byte in the stream always having index zero. A 64-bit index is big enough that we can treat it as **never overflowing**. In the TCP headers, however, space is precious, and each byte's index in the stream is represented not with a 64-bit index but with a 32-bit "sequence number," or "seqno." This adds three complexities:
 
 1. **Your implementation needs to plan for 32-bit integers to wrap around.** Streams in TCP can be arbitrarily long -- there's no limit to the length of a ByteStream that can be sent over TCP. But $2^{32}$ bytes is only 4 GiB, which is not so big. Once a 32-bit sequence number counts up to $2^{32} − 1$, the next byte in the stream will have the sequence number zero.
@@ -168,7 +172,7 @@ We've defined the type for you and provided some helper functions (see [wrapping
   
    **Hint #2:** *We're expecting one line of code for wrap, and less than 10 lines of code for unwrap. If you find yourself implementing a lot more than this, it might be wise to step back and try to think of a different strategy.*
 
-## 2 Implementing the TCP receiver
+## Implementing the TCP receiver
 Congratulations on getting the wrapping and unwrapping logic right! We'll shake your hand
 (or, post-covid, elbow-bump) if this victory happens at the lab session. In the rest of this
 lab, you'll be implementing the TCPReceiver. It will (1) receive messages from its peer's
@@ -239,7 +243,7 @@ public:
 };
 ```
 
-### 2.1 receive()
+### receive()
 This is method will be called each time a new segment is received from the peer's sender.
 This method needs to:
 
@@ -287,7 +291,7 @@ Thanks to your work last week, we know that the remote TCP receiver can reconstr
 the byte stream as long as it receives each index-tagged byte at least once -- no matter
 the order. The sender's job is to make sure the receiver gets each byte at least once.
 
-## 1 How does the TCPSender know if a segment was lost?
+## How does the TCPSender know if a segment was lost?
 
 Your TCPSender will be sending a bunch of TCPSenderMessages. Each will contain a (possibly-empty) substring from the outgoing ByteStream, indexed with a sequence number to indicate
 its position in the stream, and marked with the SYN flag at the beginning of the stream, and
@@ -360,7 +364,7 @@ You might choose to implement the functionality of the retransmission timer in a
 class, but it's up to you. If you do, please add it to the existing files (tcp_sender.hh and
 tcp_sender.cc).
 
-## 2 Implementing the TCP sender
+## Implementing the TCP sender
 Okay! We've discussed the basic idea of what the TCP sender does (given an outgoing
 ByteStream, split it up into segments, send them to the receiver, and if they don't get
 acknowledged soon enough, keep resending them). And we've discussed when to conclude
@@ -423,7 +427,7 @@ To complete Checkpoint 3, please review the full interface in src/tcp sender.hh 
 the complete TCPSender public interface in the tcp sender.hh and tcp sender.cc files. We
 expect you'll want to add private methods and member variables, and possibly a helper class.
 
-## 3 FAQs and special cases
+## FAQs and special cases
  - *How do I "send" a message?*
   
     Return it when `maybe_send()` is called.
@@ -462,3 +466,143 @@ to be remembered or retransmitted.
  - *Where can I read if there are more FAQs after this PDF comes out?*
 
     Please check the website (https://cs144.github.io/lab faq.html) and Ed regularly.
+
+# Lab 4: down the stack (the network interface)
+## Overview
+In this week's lab, you'll go down the stack and implement a network interface: the bridge
+between Internet datagrams that travel the world, and link-layer Ethernet frames that travel
+one hop. This component can fit "underneath" your TCP/IP implementation from the earlier
+labs, but it will also be used in a different setting: when you build a router in Lab 6, it will
+route datagrams *between* network interfaces. Figure 1 shows how the network interface fits
+into both settings.
+
+Figure 1: The network interface bridges the worlds of Internet datagrams and of link-layer
+frames. This component is useful as part of a host's TCP/IP stack (left side), and also as
+part of an IP router (right side).
+![](images/check4_1.png)
+
+In past labs, you wrote a TCP implementation that can exchange **TCP segments** with any
+other computer that speaks TCP. How are these segments actually conveyed to the peer's
+TCP implementation? As we've discussed, there are a few options:
+
+ - **TCP-in-UDP-in-IP.** The TCP segments can be carried in the payload of a user
+datagram. When working in a normal (user-space) setting, this is the easiest to
+implement: Linux provides an interface (a "datagram socket", UDPSocket) that lets
+applications supply *only the payload* of a user datagram and the target address, and the
+kernel takes care of constructing the UDP header, IP header, and Ethernet header, then
+sending the packet to the appropriate next hop. The kernel makes sure that each socket
+has an exclusive combination of local and remote addresses and port numbers, and
+since the kernel is the one writing these into the UDP and IP headers, it can guarantee
+isolation between different applications.
+
+ - **TCP-in-IP.** In common usage, TCP segments are almost always placed directly inside
+an Internet datagram, without a UDP header between the IP and TCP headers. This
+is what people mean by "TCP/IP." This is a little more difficult to implement. Linux
+provides an interface, called a TUN device, that lets application supply an *entire*
+Internet datagram, and the kernel takes care of the rest (writing the Ethernet header,
+and actually sending via the physical Ethernet card, etc.). But now the application has
+to construct the full IP header itself, not just the payload.
+
+ - **TCP-in-IP-in-Ethernet.** In the above approach, we're still relying on the Linux
+kernel for part of the networking stack. Each time your code writes an IP datagram
+to the TUN device, Linux has to construct an appropriate link-layer (Ethernet) frame
+with the IP datagram as its payload. This means Linux has to figure out the next hop's
+Ethernet destination address, given the IP address of the next hop. If it doesn't know this mapping already, Linux broadcasts a query that asks, "Who claims the following
+IP address? What's your Ethernet address?" and waits for a response.
+    
+    These functions are performed by the *network interface*: a component that translates
+outbound IP datagrams into link-layer (e.g., Ethernet) frames and vice versa. (In a real
+system, network interfaces typically have names like eth0, eth1, wlan0, etc.) **In this week's lab**, you'll implement a network interface, and stick it at the very bottom of
+your TCP/IP stack. Your code will produce raw Ethernet frames, which will be handed
+over to Linux through an interface called a TAP device -- similar to a TUN device, but
+more low-level, in that it exchanges raw link-layer frames instead of IP datagrams.
+
+Most of the work will be in looking up (and caching) the Ethernet address for each next-hop
+IP address. The protocol for this is called the **Address Resolution Protocol**, or **ARP**.
+
+We've given you unit tests that put your network interface through its paces. In Lab 6, you'll
+use the same network interface outside the context of TCP, as a part of an IP router.
+
+## The Address Resolution Protocol
+Your main task in this lab will be to implement the three main methods of `NetworkInterface`
+(in the [network_interface.cc](src/network_interface.cc) file), maintaining a mapping from IP addresses to Ethernet
+addresses. The mapping is a cache, or "soft state": the `NetworkInterface` keeps it around for efficiency's sake, but if it has to restart from scratch, the mapping will naturally be
+regenerated without causing a problem.
+
+1. `void NetworkInterface::send_datagram(const InternetDatagram &dgram, const Address &next_hop);`
+    
+    This method is called when the caller (e.g., your TCPConnection or a router) wants to
+send an outbound Internet (IP) datagram to the next hop.
+It's your interface's job to
+translate this datagram into an Ethernet frame and (eventually) send it.
+     - *If the destination Ethernet address is already known*, send it right away. Create
+an Ethernet frame (with `type = EthernetHeader::TYPE_IPv4`), set the payload to
+be the serialized datagram, and set the source and destination addresses.
+     - *If the destination Ethernet address is unknown*, broadcast an ARP request for the
+next hop's Ethernet address, and queue the IP datagram so it can be sent after
+the ARP reply is received.
+    
+    **Except**: You don't want to flood the network with ARP requests. **If the network
+interface already sent an ARP request about the same IP address in the last
+five seconds, don't send a second request** -- just wait for a reply to the first one.
+Again, queue the datagram until you learn the destination Ethernet address.
+
+2. `optional<InternetDatagram> NetworkInterface::recv_frame(const EthernetFrame &frame);`
+
+    This method is called when an Ethernet frame arrives from the network. The code
+should ignore any frames not destined for the network interface (meaning, the Ethernet
+destination is either the broadcast address or the interface's own Ethernet address
+stored in the `_ethernet_address` member variable).
+     - *If the inbound frame is IPv4*, parse the payload as an `InternetDatagram` and,
+if successful (meaning the `parse()` method returned true), return the resulting
+`InternetDatagram` to the caller.
+     - *If the inbound frame is ARP*, parse the payload as an `ARPMessage` and, if successful,
+remember the mapping between the sender's IP address and Ethernet address for
+30 seconds. (Learn mappings from both requests and replies.) In addition, if it's
+an ARP request asking for our IP address, send an appropriate ARP reply.
+
+3. `std::optional<EthernetFrame> maybe_send();`
+
+    This is the `NetworkInterface`'s opportunity to actually send a `EthernetFrame` if it
+wants to.
+
+4. `void NetworkInterface::tick(const size_t ms_since_last_tick);`
+
+    This is called as time passes. Expire any IP-to-Ethernet mappings that have expired.
+
+## Q & A
+ - *How much code are you expecting?*
+    
+    Overall, we expect the implementation (in [network_interface.cc](src/network_interface.cc)) will require about
+100–150 lines of code in total.
+ - *How do I "send" an Ethernet frame?*
+    
+    Return it when `maybe_send()` is called.
+ - *What data structure should I use to record the mapping between next-hop IP address
+and Ethernet addresses?*
+    
+    Up to you!
+ - *How do I convert an IP address that comes in the form of an Address object, into a
+raw 32-bit integer that I can write into the ARP message?*
+    
+    Use the `Address::ipv4_numeric()` method.
+ - *What should I do if the NetworkInterface sends an ARP request but never gets a reply?
+Should I resend it after some timeout? Signal an error to the original sender using
+ICMP?*
+    
+    In real life, yes, both of those things, but don't worry about that in this lab. (In real
+life, an interface will eventually send an ICMP "host unreachable" back across the
+Internet to the original sender if it can't get a reply to its ARP requests.)
+ - *What should I do if an InternetDatagram is queued waiting to learn the Ethernet address
+of the next hop, and that information never comes? Should I drop the datagram after
+some timeout?*
+    
+    Again, definitely a "yes" in real life, but don't worry about that in this lab.
+ - *How do `parse()` and `serialize()` work?*
+    
+    `parse()` takes a `T& obj` and `vector<Buffer>& buffers`. On success, it fills `obj` with
+the result and returns `true`. Otherwise, it returns `false`. 
+`serialize()` takes a `T& obj` and returns the result as a `vector<Buffer>`.
+ - *Where can I read if there are more FAQs after this PDF comes out?*
+    
+    Please check the website (https://cs144.github.io/lab_faq.html) and EdStem regularly.
