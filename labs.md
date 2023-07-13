@@ -22,6 +22,10 @@
   - [Overview](#overview)
   - [The Address Resolution Protocol](#the-address-resolution-protocol)
   - [Q \& A](#q--a)
+- [Lab 5: building an IP router](#lab-5-building-an-ip-router)
+  - [Overview](#overview-1)
+  - [Implementing the Router](#implementing-the-router)
+  - [Q \& A](#q--a-1)
 
 # Lab 0: networking warmup
 ## Writing a network program using an OS stream socket
@@ -606,3 +610,144 @@ the result and returns `true`. Otherwise, it returns `false`.
  - *Where can I read if there are more FAQs after this PDF comes out?*
     
     Please check the website (https://cs144.github.io/lab_faq.html) and EdStem regularly.
+
+# Lab 5: building an IP router
+## Overview
+In this week's lab checkpoint, you'll implement an IP router on top of your existing
+NetworkInterface. A router has several network interfaces, and can receive Internet datagrams on any of them. The router's job is to forward the datagrams it gets according to the
+**routing table**: a list of rules that tells the router, for any given datagram,
+ - What interface to send it out
+ - The IP address of the next hop
+
+Your job is to implement a router that can figure out these two things for any given datagram.
+(You will not need to implement the algorithms that make the routing table, e.g. RIP, OSPF,
+BGP, or an SDN controller -- just the algorithm that *follows* the routing table.)
+
+Your implementation of the router will use the Minnow library with a new `Router` class, and
+tests that will check your router's functionality in a simulated network. Checkpoint 5 builds
+on your implementation of `NetworkInterface` from Checkpoint 4, but does not use the TCP
+stack you implemented previously. IP routers don't have to know anything about TCP, ARP,
+or Ethernet (only IP). We expect your implementation will require about **30-60 lines of
+code**. (The scripts/lines-of-code tool prints "Router: 61 lines of code" from the starter
+code, and "109 lines of code" for our example solutions.)
+
+Figure 1: A router contains several network interfaces and can receive IP datagrams on
+any one of them. The router forwards any datagram it receives to the next hop, on the
+appropriate outbound interface. The routing table tells the router how to make this decision.
+
+![](images/check5_1.png)
+
+## Implementing the Router
+In this lab, you will implement a `Router` class that can:
+ - keep track of a routing table (the list of forwarding rules, or routes), and
+ -  forward each datagram it receives:
+     - to the correct next hop
+     - on the correct outgoing NetworkInterface
+
+Your implementation will be added to the [router.hh](./src/router.hh) and [router.cc](./src/router.cc) skeleton files. Before
+you get to coding, please review the documentation for the new `Router` class in [router.hh](./src/router.hh).
+
+Here are the two methods you'll implement, and what we're expecting in each:
+
+`void add_route(uint32_t route_prefix,
+uint8_t prefix_length,
+optional<Address> next_hop,
+size_t interface_num);`
+
+This method adds a route to the routing table. You'll want to add a data structure as a
+private member in the `Router` class to store this information. All this method needs to do is
+save the route for later use.
+
+**What do the parts of a route mean?**
+ - A route is a "match-action" rule: it tells the router that if a datagram is headed for a
+particular network (a range of IP addresses), and if the route is chosen as the most
+specific matching route, then the router should forward the datagram to a particular
+next hop on a particular interface.
+ - **The "match": is the datagram headed for this network?** The `route_prefix` and
+`prefix_length` together specify a range of IP addresses (a network) that might include
+the datagram's destination. The `route_prefix` is a 32-bit numeric IP address. The
+`prefix_length` is a number between 0 and 32 (inclusive); it tells the router how many
+most-significant bits of the `route_prefix` are significant. For example, to express a
+route to the network "18.47.0.0/16" (this matches any 32-bit IP address where the first
+two bytes are 18 and 47), the `route_prefix` would be 305070080 ($18 × 2^
+{24} + 47 × 2^
+{16}$),
+and the `prefix_length` would be 16. Any datagram destined for "18.47.x.y" will
+match.
+ - **The "action": what to do if the route matches and is chosen.** If the router is
+*directly* attached to the network in question, the `next_hop` will be an empty optional.
+In that case, the `next_hop` is the datagram's destination address. But if the router is
+connected to the network in question through some other router, the `next_hop` will
+contain the IP address of the next router along the path. The `interface_num` gives the
+index of the router's `NetworkInterface` that should use to send the datagram to the
+next hop. You can access this interface with the `interface(interface_num)` method.
+
+
+`void route();`
+
+Here's where the rubber meets the road. This method needs to route each incoming datagram
+to the next hop, out the appropriate interface. It needs to implement the "longest-prefix
+match" logic of an IP router to find the best route to follow. That means:
+
+ - The Router searches the routing table to find the routes that match the datagram's
+destination address. By "match," we mean the most-significant `prefix_length` bits of
+the destination address are identical to the most-significant `prefix_length` bits of the
+`route_prefix`.
+ - Among the matching routes, the router chooses the route with the *biggest* value of
+`prefix_length`. This is the **longest-prefix-match** route.
+ - If no routes matched, the router drops the datagram.
+ - The router decrements the datagram's TTL (time to live). If the TTL was zero already,
+or hits zero after the decrement, the router should drop the datagram.
+ - Otherwise, the router sends the modified datagram on the appropriate interface
+( `interface(interface_num).send_datagram()` ) to the appropriate next hop.
+
+There's a beauty (or at least a successful abstraction) in the Internet's design here: the
+router never thinks about TCP, about ARP, or about Ethernet frames. The router
+doesn't even know what the link layer looks like. The router only thinks about Internet
+datagrams, and only interacts with the link layer through the `NetworkInterface`
+abstraction. When it comes to questions like, "How are link-layer addresses resolved?"
+or "Does the link layer even have its own addressing scheme distinct from IP?" or
+"What's the format of the link-layer frames?" or "What's the meaning of the datagram's
+payload?", the router just doesn't care.
+
+Figure 2: The simulated test network used in the router test, also run by
+`cmake --build build --target check5` . (Fun fact: the uun network is [David Mazieres's
+slice of the Internet, allocated in 1993](https://whois.arin.net/rest/net/NET-198-178-229-0-1). The whois tool, or the linked website, can be used to
+look up who controls each IP address allocation.)
+
+![](images/check5_2.png)
+
+## Q & A
+ - *What data structure should I use to record the routing table?*
+    
+    Up to you! But no need to get crazy. It's perfectly acceptable for each datagram to
+require $O(N)$ work, where $N$ is the number of entries in the routing table. If you'd like
+to do something more efficient, we'd encourage you to get a working implementation first before optimizing, and carefully document and comment whatever you choose to
+implement.
+
+ - *How do I convert an IP address that comes in the form of an Address object, into a
+raw 32-bit integer that I can write into the ARP message?*
+    
+    Use the `Address::ipv4_numeric()` method.
+ - *How do I convert an IP address that comes in the form of a raw 32-bit integer into an
+Address object?*
+    
+    Use the `Address::from ipv4_numeric()` method.
+ - *How do I compare the most-significant N bits (where 0 ≤ N ≤ 32) of one 32-bit IP
+address with the most-significant N bits of another 32-bit IP address?*
+    
+    This is probably the "trickiest" part of this assignment -- getting that logic right. It
+may be worth writing a small test program in C++ (a short standalone program) or
+adding a test to Minnow to verify your understanding of the relevant C++ operators
+and double-check your logic.
+    
+    Recall that in C and C++, it can produce *undefined behavior* to shift a 32-bit integer
+by 32 bits. The tests run your code under sanitizers that try to detect this. You
+can run the router test directly by running [./build/tests/router](./build/tests/router) from the minnow
+directory.
+ - *If the router has no route to the destination, or if the TTL hits zero, shouldn't it send
+an ICMP error message back to the datagram's source?*
+    
+    In real life, yes, that would be helpful. But not necessary in this lab -- dropping the
+datagram is sufficient. (Even in the real world, not every router will send an ICMP
+message back to the source in these situations.)

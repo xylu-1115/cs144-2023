@@ -116,7 +116,6 @@ optional<EthernetFrame> NetworkInterface::maybe_send()
     auto frame = send_frame.front();
     send_frame.pop();
     return frame;
-  } else {
-    return {};
-  }
+  } 
+  return {};
 }
