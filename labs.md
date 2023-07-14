@@ -26,6 +26,10 @@
   - [Overview](#overview-1)
   - [Implementing the Router](#implementing-the-router)
   - [Q \& A](#q--a-1)
+- [Lab 6: putting it all together](#lab-6-putting-it-all-together)
+  - [Overview](#overview-2)
+  - [The Network](#the-network)
+  - [Sending a file](#sending-a-file)
 
 # Lab 0: networking warmup
 ## Writing a network program using an OS stream socket
@@ -751,3 +755,130 @@ an ICMP error message back to the datagram's source?*
     In real life, yes, that would be helpful. But not necessary in this lab -- dropping the
 datagram is sufficient. (Even in the real world, not every router will send an ICMP
 message back to the source in these situations.)
+
+# Lab 6: putting it all together
+## Overview
+By this point in the class, you've implemented a significant portion of the Internet's infrastructure. From Checkpoint 0 (a reliable byte stream), to Checkpoints 1-3 (the Transmission
+Control Protocol), Checkpoint 4 (an IP/Ethernet network interface) and Checkpoint 5 (an
+IP router), you have done a lot of coding!
+
+In this optional checkpoint, you won't need to do any coding (assuming your previous
+checkpoints are in reasonable working shape). Instead, to cap off your accomplishment, you're
+going to use all of your previous labs to create a real network that includes your network
+stack (host and router) talking to the network stack implemented by another student in the
+class.
+
+This checkpoint is done in pairs. You will need to work with a lab partner (another student
+in the class). Please use the lab sessions to find lab partners, or EdStem if you cannot attend
+the lab session. If it's necessary, the same student can serve as "lab partner" more than once.
+
+This checkpoint is optional: If you're happy with your subjective scores on at least five
+of your earlier checkpoints, you don't need to do this one. But we still encourage you to do
+it—it's fun and rewarding to get a real network working with all the pieces of the Internet
+you've built!
+
+## The Network
+In this lab, you'll create a real network that combines your network stack with one implemented
+by another student in the class. Each of you will contribute one host (including your reliable
+Byte Stream, your TCP implementation, and your NetworkInterface) and one router:
+
+![](images/check6_1.png)
+
+Because it's likely that you or your lab partner will be behind a Network Address Translator, the network connection between the two sides will flow through a relay server
+(cs144.keithw.org).
+
+We have glued your code together in a new application that can be found in build/apps/endtoend.
+Here are the steps to run it:
+1. Before doing these steps with a lab partner, try them by yourself. You can play
+both roles, client and server, by using two different windows or terminals on your VM.
+This way your network will include two copies of your code (host and router) talking to
+themselves. This is easier to debug than talking to a stranger!
+    
+    Once these steps work on your own, then try them with a lab partner. Decide which of
+the two of you will act as the "client" and who will be the "server". Once it works, you
+can always swap the roles and try again.
+2. To use the relay, please pick a random even number between 1024 and 64000. This
+identifies your lab group and needs to be different from any other lab group working at
+the same time, so please do pick a random number. And it needs to be an even number.
+For the rest of these examples, we'll assume you picked "3000":
+3. From the "build" directory, the "server" student runs:
+    ```bash
+    ./apps/endtoend server cs144.keithw.org 3000
+    ```
+    (replace "3000" with your actual number).
+    
+    If all goes well, the "server" will print output like this:
+    ```bash
+    $ ./apps/endtoend server cs144.keithw.org 3000
+    DEBUG: Network interface has Ethernet address 02:00:00:5e:61:17 and IP address 172.16.0.1
+    DEBUG: Network interface has Ethernet address 02:00:00:cd:e7:e0 and IP address 10.0.0.172
+    DEBUG: adding route 172.16.0.0/12 => (direct) on interface 0
+    DEBUG: adding route 10.0.0.0/8 => (direct) on interface 1
+    DEBUG: adding route 192.168.0.0/16 => 10.0.0.192 on interface 1
+    DEBUG: Network interface has Ethernet address 5a:75:4e:8b:20:00 and IP address 172.16.0.100
+    DEBUG: Listening for incoming connection...
+    ```
+
+4. From the "build" directory, the "client" student runs:
+    ```bash
+    ./apps/endtoend client cs144.keithw.org 3001
+    ```
+    (replace "3001" with whatever your random number was, plus one).
+    
+    If all goes well, the "client" will print output like this:
+    ```bash
+    $ ./apps/endtoend client cs144.keithw.org 3001
+    DEBUG: Network interface has Ethernet address 02:00:00:41:c7:5b and IP address 192.168.0.1
+    DEBUG: Network interface has Ethernet address 02:00:00:e6:66:d9 and IP address 10.0.0.192
+    DEBUG: adding route 192.168.0.0/16 => (direct) on interface 0
+    DEBUG: adding route 10.0.0.0/8 => (direct) on interface 1
+    DEBUG: adding route 172.16.0.0/12 => 10.0.0.172 on interface 1
+    DEBUG: Network interface has Ethernet address 26:05:12:4a:8a:c9 and IP address 192.168.0.50
+    DEBUG: Connecting from 192.168.0.50:57005...
+    DEBUG: Connecting to 172.16.0.100:1234...
+    Successfully connected to 172.16.0.100:1234.
+    ```
+    and the "server" will print one more line:
+    ```bash
+    New connection from 192.168.0.50:57005.
+    ```
+5. If you see the expected output, you're in really good shape -- the two computers
+have successfully exchanged a TCP handshake!
+    1. Pat yourselves on the back (using appropriate social distancing protocols) -- you've
+earned it!
+    2. Now it's time to exchange data. Type in one of the windows, and see the output
+appear in the other. Try typing in the reverse direction.
+    3. Try ending the connection. Type ctrl-D when you are done. When each side
+does so, it will end input on the outbound ByteStream in that direction, while
+continuing to receive incoming data until the peer ends its own ByteStream. Verify
+this happens.
+    4. When both sides have ended their ByteStreams, and one side has finished lingering
+for a few seconds, both programs should exit gracefully.
+6. If you don't see the expected output, it may be time to turn on "debug mode".
+Run the "endtoend" program with one additional argument: append a "debug" to the
+end of the command line. This will print out every Ethernet frame being exchanged,
+and you can see all the ARP and TCP/IP frames.
+7. Once you have the network working between two windows on your own computer, it's
+time to try the same steps with a lab partner (and their own implementation).
+## Sending a file
+Once it looks like you can have a basic conversation, try sending a file over the network.
+Again, you can try this yourself, and if all goes well, then try it with a lab partner. Here is
+how:
+
+To write a one-megabyte random file to "/tmp/big.txt":
+```bash
+dd if=/dev/urandom bs=1M count=1 of=/tmp/big.txt
+```
+To have the server send the file as soon as it accepts an incoming connection:
+```bash
+./apps/endtoend server cs144.keithw.org even number < /tmp/big.txt
+```
+To have the client close its outbound stream and download the file:
+```bash
+</dev/null ./apps/endtoend client cs144.keithw.org odd number > /tmp/big-received.txt
+```
+To compare two files and make sure they're the same:
+```bash
+sha256sum /tmp/big.txt or sha256sum /tmp/big-received.txt
+```
+If the SHA-256 hashes match, you can be almost certain the file was transmitted correctly.

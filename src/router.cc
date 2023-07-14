@@ -49,7 +49,6 @@ void Router::route()
         for ( int i = 31; i && node.get(); --i ) {
           if ( node->item.get() != nullptr ) {
             rec = node->item;
-            printf( "%s\n", Address::from_ipv4_numeric( rec->route_prefix ).ip().c_str() );
           }
           node = node->next[dst_ip >> i & 1];
         }
